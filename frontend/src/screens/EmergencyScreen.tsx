@@ -40,6 +40,20 @@ const policeStationIcon = new L.DivIcon({
   iconAnchor: [16, 32],
 });
 
+const hospitalIcon = new L.DivIcon({
+  className: 'custom-marker',
+  html: `<div class="w-8 h-8 bg-red-500 border-2 border-white rounded-lg shadow-lg flex items-center justify-center text-white text-xs">🏥</div>`,
+  iconSize: [32, 32],
+  iconAnchor: [16, 32],
+});
+
+const fireStationIcon = new L.DivIcon({
+  className: 'custom-marker',
+  html: `<div class="w-8 h-8 bg-orange-500 border-2 border-white rounded-lg shadow-lg flex items-center justify-center text-white text-xs">🚒</div>`,
+  iconSize: [32, 32],
+  iconAnchor: [16, 32],
+});
+
 // Map controller for live updates
 function MapController({ center, zoom }: { center: [number, number]; zoom: number }) {
   const map = useMap();
@@ -73,11 +87,16 @@ export default function EmergencyScreen({ onBack }: EmergencyScreenProps) {
   const [locating, setLocating] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   
-  // Nearby services
-  const [nearestPolice, setNearestPolice] = useState<NearbyService | null>(null);
-  const [nearestHospital, setNearestHospital] = useState<NearbyService | null>(null);
-  const [nearestFire, setNearestFire] = useState<NearbyService | null>(null);
+  // Nearby services - store arrays for map display
+  const [policeStations, setPoliceStations] = useState<NearbyService[]>([]);
+  const [hospitals, setHospitals] = useState<NearbyService[]>([]);
+  const [fireStations, setFireStations] = useState<NearbyService[]>([]);
   const [loadingServices, setLoadingServices] = useState(false);
+
+  // Get nearest of each for quick access
+  const nearestPolice = policeStations[0] || null;
+  const nearestHospital = hospitals[0] || null;
+  const nearestFire = fireStations[0] || null;
 
   // IP-based location fallback
   const getLocationFromIP = useCallback(async () => {
@@ -107,16 +126,10 @@ export default function EmergencyScreen({ onBack }: EmergencyScreenProps) {
     try {
       const response = await apiService.getNearbyAll(lat, lng, 10000);
       if (response.success && response.data) {
-        // Get nearest of each type
-        if (response.data.police?.length > 0) {
-          setNearestPolice(response.data.police[0]);
-        }
-        if (response.data.hospital?.length > 0) {
-          setNearestHospital(response.data.hospital[0]);
-        }
-        if (response.data.fire?.length > 0) {
-          setNearestFire(response.data.fire[0]);
-        }
+        // Store all nearby services for map display
+        setPoliceStations(response.data.police || []);
+        setHospitals(response.data.hospital || []);
+        setFireStations(response.data.fire || []);
       }
     } catch (error) {
       console.error('Failed to fetch nearby services:', error);
@@ -245,44 +258,102 @@ export default function EmergencyScreen({ onBack }: EmergencyScreenProps) {
           <p className="text-white/80 text-sm">{t('emergency.dispatching')}</p>
         </motion.div>
 
-        {/* Live Location Map */}
+        {/* Live Location Map - Shows all nearby emergency services */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="h-40 rounded-2xl overflow-hidden mb-4 border-2 border-white/30"
+          className="h-52 rounded-2xl overflow-hidden mb-3 border-2 border-white/30"
         >
           {userLocation ? (
             <MapContainer
               center={[userLocation.lat, userLocation.lng]}
-              zoom={15}
+              zoom={14}
               style={{ height: '100%', width: '100%' }}
               zoomControl={false}
             >
               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-              <MapController center={[userLocation.lat, userLocation.lng]} zoom={15} />
+              <MapController center={[userLocation.lat, userLocation.lng]} zoom={14} />
               
               {/* User location with pulse */}
               <Circle
                 center={[userLocation.lat, userLocation.lng]}
-                radius={100}
+                radius={150}
                 pathOptions={{ color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.2 }}
               />
               <Marker position={[userLocation.lat, userLocation.lng]} icon={userLocationIcon}>
                 <Popup>📍 Your Live Location</Popup>
               </Marker>
 
-              {/* Nearest police station */}
+              {/* All nearby police stations */}
+              {policeStations.map((station) => (
+                <Marker 
+                  key={`police-${station.id}`} 
+                  position={[station.lat, station.lng]} 
+                  icon={policeStationIcon}
+                >
+                  <Popup>
+                    <div className="min-w-[150px]">
+                      <strong className="text-blue-600">🚔 {station.name}</strong>
+                      <p className="text-xs text-gray-600 mt-1">{station.distance} km away</p>
+                      {station.phone !== 'N/A' && (
+                        <a href={`tel:${station.phone}`} className="text-xs text-blue-500 block mt-1">
+                          📞 {station.phone.split(';')[0]}
+                        </a>
+                      )}
+                    </div>
+                  </Popup>
+                </Marker>
+              ))}
+
+              {/* All nearby hospitals */}
+              {hospitals.map((hospital) => (
+                <Marker 
+                  key={`hospital-${hospital.id}`} 
+                  position={[hospital.lat, hospital.lng]} 
+                  icon={hospitalIcon}
+                >
+                  <Popup>
+                    <div className="min-w-[150px]">
+                      <strong className="text-red-600">🏥 {hospital.name}</strong>
+                      <p className="text-xs text-gray-600 mt-1">{hospital.distance} km away</p>
+                      {hospital.phone !== 'N/A' && (
+                        <a href={`tel:${hospital.phone}`} className="text-xs text-red-500 block mt-1">
+                          📞 {hospital.phone.split(';')[0]}
+                        </a>
+                      )}
+                    </div>
+                  </Popup>
+                </Marker>
+              ))}
+
+              {/* All nearby fire stations */}
+              {fireStations.map((station) => (
+                <Marker 
+                  key={`fire-${station.id}`} 
+                  position={[station.lat, station.lng]} 
+                  icon={fireStationIcon}
+                >
+                  <Popup>
+                    <div className="min-w-[150px]">
+                      <strong className="text-orange-600">🚒 {station.name}</strong>
+                      <p className="text-xs text-gray-600 mt-1">{station.distance} km away</p>
+                      {station.phone !== 'N/A' && (
+                        <a href={`tel:${station.phone}`} className="text-xs text-orange-500 block mt-1">
+                          📞 {station.phone.split(';')[0]}
+                        </a>
+                      )}
+                    </div>
+                  </Popup>
+                </Marker>
+              ))}
+
+              {/* Line to nearest police (for emergency response) */}
               {nearestPolice && (
-                <>
-                  <Marker position={[nearestPolice.lat, nearestPolice.lng]} icon={policeStationIcon}>
-                    <Popup>{nearestPolice.name}</Popup>
-                  </Marker>
-                  <Polyline
-                    positions={[[userLocation.lat, userLocation.lng], [nearestPolice.lat, nearestPolice.lng]]}
-                    pathOptions={{ color: '#3b82f6', weight: 3, dashArray: '10, 10' }}
-                  />
-                </>
+                <Polyline
+                  positions={[[userLocation.lat, userLocation.lng], [nearestPolice.lat, nearestPolice.lng]]}
+                  pathOptions={{ color: '#3b82f6', weight: 2, dashArray: '8, 8' }}
+                />
               )}
             </MapContainer>
           ) : (
@@ -301,6 +372,22 @@ export default function EmergencyScreen({ onBack }: EmergencyScreenProps) {
             </div>
           )}
         </motion.div>
+
+        {/* Map Legend */}
+        <div className="flex items-center justify-center gap-4 mb-3 text-xs text-white/80">
+          <span className="flex items-center gap-1">
+            <span className="w-3 h-3 bg-red-500 rounded-full"></span> You
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="w-3 h-3 bg-blue-600 rounded"></span> Police
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="w-3 h-3 bg-red-500 rounded"></span> Hospital
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="w-3 h-3 bg-orange-500 rounded"></span> Fire
+          </span>
+        </div>
 
         {/* Location status */}
         {userLocation && (
